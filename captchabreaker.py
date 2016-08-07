@@ -8,8 +8,32 @@ from PIL import Image
 
 SINGLE = False
 SHOW = True
-PRINT = False
+PRINT = True
 SHOW_IMAGES = SINGLE and SHOW
+
+
+DEFAULT_CONFIG = {
+    'pixeldiff_similarity_cutoff': 35,        # ranges (20, 50)
+    'min_max_colorful_cutoff': 10,            # ranges (5, 20)
+    'filter_grayscale_cutoff': 200,           # ranges (170, 215)
+    'black_and_white_grayscale_cutoff': 195,  # ranges (170, 215)
+    'count_around_delete_cutoff': 2,          # ranges (2, 4)
+    'count_around_add_cutoff': 4,             # ranges (2, 5)
+    'conway_many_count': 2,                   # ranges (0, 5)
+    'overlay': False                          # ranges (False, True)
+}
+
+AWESOME_CONFIG = {
+    'conway_many_count': 4,
+    'count_around_add_cutoff': 5,
+    'min_max_colorful_cutoff': 10,
+    'pixeldiff_similarity_cutoff': 20,
+    'filter_grayscale_cutoff': 181,
+    'overlay': True,
+    'black_and_white_grayscale_cutoff': 203,
+    'count_around_delete_cutoff': 3
+}
+
 
 
 def show_decorator(show=True, copy=True):
@@ -66,20 +90,25 @@ def pixeldiff(p1, p2):
 
 
 @show_decorator()
-def filter(image, average):
+def filter(image, average, config):
     pixels = image.load()
     avg_pixels = average.load()
+    pixeldiff_cutoff = config['pixeldiff_similarity_cutoff']
+    grayscale_cutoff = config['filter_grayscale_cutoff']
+    minmax_cutoff = config['min_max_colorful_cutoff']
     for p in iterator(image):
-        if pixeldiff(pixels[p], avg_pixels[p]) < 35 and (max(pixels[p]) - min(pixels[p]) > 10 or sum(pixels[p])/3 > 200):
+        if pixeldiff(pixels[p], avg_pixels[p]) < pixeldiff_cutoff and (
+            max(pixels[p]) - min(pixels[p]) > minmax_cutoff or sum(pixels[p])/3 > grayscale_cutoff):
             pixels[p] = (255, 255, 255)
 
 
 @show_decorator()
-def black_and_white(image):
+def black_and_white(image, config):
     image = image.copy()
     pixels = image.load()
+    cutoff = config['black_and_white_grayscale_cutoff']
     for p in iterator(image):
-        pixels[p] = (0, 0, 0) if sum(pixels[p])/3 < 195 else (255, 255, 255)
+        pixels[p] = (0, 0, 0) if sum(pixels[p])/3 < cutoff else (255, 255, 255)
     return image.convert('L')
 
 
@@ -89,31 +118,33 @@ def count_around(pixels, i, j):
 
 
 @show_decorator()
-def conway_low(image):
+def conway_low(image, config):
     old_pixels = image.copy().load()
     pixels = image.load()
     for (i, j) in iterator(image):
         if i == 0 or j == 0 or i + 1 == image.size[0] or j + 1 == image.size[1]:
             continue
-        if pixels[i, j] == 0 and count_around(old_pixels, i, j) < 2:
+        cutoff = config['count_around_delete_cutoff']
+        if pixels[i, j] == 0 and count_around(old_pixels, i, j) < cutoff:
             pixels[i, j] = 255
 
 
 @show_decorator(show=False, copy=False)
-def conway_grow(image):
+def conway_grow(image, config):
     old_pixels = image.copy().load()
     pixels = image.load()
     for (i, j) in iterator(image):
         if i == 0 or j == 0 or i + 1 == image.size[0] or j + 1 == image.size[1]:
             continue
-        if pixels[i, j] == 255 and count_around(old_pixels, i, j) > 4:
+        cutoff = config['count_around_add_cutoff']
+        if pixels[i, j] == 255 and count_around(old_pixels, i, j) > cutoff:
             pixels[i, j] = 0
 
 
 @show_decorator()
-def conway_many(image, count):
-    for i in range(count):
-        conway_grow(image)
+def conway_many(image, config):
+    for i in range(config['conway_many_count']):
+        conway_grow(image, config)
 
 
 @show_decorator()
@@ -154,6 +185,7 @@ def split(image):
             seeking = True
             result.append(image.crop((base, 5, i + 2, image.size[1])))
             base = i
+    result.append(image.crop((base, 5, image.size[0], image.size[1])))
     return result
 
 
@@ -161,13 +193,7 @@ def filter_split(image):
     return [s for s in split(image) if len([p for p in iterator(s) if s.load()[p] != (255, 255, 255)]) > 10]
 
 
-def attempt_detect(image, average):
-    # original = image.copy()
-    image = filter(image, average)
-    image = black_and_white(image)
-    image = conway_low(image)
-    image = conway_many(image, 2)
-    # image = overlay(image, original)
+def solution_from_image(image):
     pieces = filter_split(image)
     if len(pieces) != 4:
         return '????'
@@ -183,26 +209,40 @@ def attempt_detect(image, average):
     return string
 
 
-def detect(image_filename):
+def attempt_detect(image, average, config):
+    original = image.copy()
+    image = filter(image, average, config)
+    image = black_and_white(image, config)
+    image = conway_low(image, config)
+    image = conway_many(image, config)
+    if config['overlay']:
+        image = overlay(image, original)
+    return solution_from_image(image)
+
+
+def detect(args):
+    image_filename, config = args
     image = Image.open(image_filename)
     answer = image_filename[6:-5]
     average = Image.open('average.png')
-    solution = attempt_detect(image, average)
+    solution = attempt_detect(image, average, config)
     return (answer, solution)
 
 
-def score_single():
-    answer, solution = detect(random.choice(glob.glob('tests/*.jpeg')))
+def score_single(config):
+    args = (random.choice(glob.glob('tests/*.jpeg')), config)
+    answer, solution = detect(args)
     if PRINT:
         print "Solution: {}".format(solution)
-        print "Answer:     {}".format(answer)
+        print "Answer:   {}".format(answer)
     return 0
 
 
-def score_multiple():
+def score_multiple(config):
     p = Pool(8)
     files = glob.glob('tests/*.jpeg')
-    results = p.map(detect, files)
+    args = zip(files, [config]*len(files))
+    results = p.map(detect, args)
     p.close()
 
     correct, incorrect, skipped = 0, 0, 0
@@ -226,14 +266,14 @@ def score_multiple():
     score = skipped + 10*correct - 10*incorrect
     if PRINT:
         print "SCORE: {}".format(score)
-    return score
+    return (score, correct, incorrect, len(files))
 
 
 def main():
     if SINGLE:
-        score_single()
+        score_single(AWESOME_CONFIG)
     else:
-        print score_multiple()
+        score_multiple(AWESOME_CONFIG)
 
 
 if __name__ == "__main__":

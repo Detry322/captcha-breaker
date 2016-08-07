@@ -1,49 +1,54 @@
 import opentuner
-from opentuner import ConfigurationManipulator
-from opentuner import IntegerParameter
-from opentuner import MeasurementInterface
-from opentuner import Result
+from opentuner.measurement import MeasurementInterface
+from opentuner.resultsdb.models import Result
+from opentuner.search.manipulator import ConfigurationManipulator, BooleanParameter, IntegerParameter
+from opentuner.search.objective import MaximizeAccuracyMinimizeSize
 
-class GccFlagsTuner(MeasurementInterface):
+from captchabreaker import score_multiple
 
-  def manipulator(self):
-    """
-    Define the search space by creating a
-    ConfigurationManipulator
-    """
-    manipulator = ConfigurationManipulator()
-    manipulator.add_parameter(
-      IntegerParameter('blockSize', 1, 10))
-    return manipulator
+best = (0, 100)
 
-  def run(self, desired_result, input, limit):
-    """
-    Compile and run a given configuration then
-    return performance
-    """
-    cfg = desired_result.configuration.data
+def is_better(old, new):
+    return new[0] > old[0] or (new[0] == old[0] and new[1] < old[1])
 
-    gcc_cmd = 'g++ mmm_block.cpp '
-    gcc_cmd += '-DBLOCK_SIZE='+ cfg['blockSize']
-    gcc_cmd += ' -o ./tmp.bin'
+class CaptchaTuner(MeasurementInterface):
 
-    compile_result = self.call_program(gcc_cmd)
-    assert compile_result['returncode'] == 0
+    def run(self, desired_result, input, limit):
+        cfg = desired_result.configuration.data
+        print "Running..."
+        _, correct, incorrect, size = score_multiple(cfg)
+        global best
+        if is_better(best, (correct, incorrect)):
+            best = (correct, incorrect)
+            print best, cfg
+        return Result(time=0.0,
+                      accuracy=(float(correct)/size),
+                      size=incorrect)
 
-    run_cmd = './tmp.bin'
+    def manipulator(self):
+        manipulator = ConfigurationManipulator()
+        manipulator.add_parameter(IntegerParameter('pixeldiff_similarity_cutoff', 20, 50))
+        manipulator.add_parameter(IntegerParameter('min_max_colorful_cutoff', 5, 20))
+        manipulator.add_parameter(IntegerParameter('filter_grayscale_cutoff', 170, 215))
+        manipulator.add_parameter(IntegerParameter('black_and_white_grayscale_cutoff', 170, 215))
+        manipulator.add_parameter(IntegerParameter('count_around_delete_cutoff', 2, 4))
+        manipulator.add_parameter(IntegerParameter('count_around_add_cutoff', 2, 5))
+        manipulator.add_parameter(IntegerParameter('conway_many_count', 0, 5))
+        manipulator.add_parameter(BooleanParameter('overlay'))
+        return manipulator
 
-    run_result = self.call_program(run_cmd)
-    assert run_result['returncode'] == 0
+    def save_final_config(self, configuration):
+        cfg = configuration.data
+        print "Final: ", cfg
+        self.manipulator().save_to_file(configuration.data,
+                                    'final_config.json')
 
-    return Result(time=run_result['time'])
-
-  def save_final_config(self, configuration):
-    """called at the end of tuning"""
-    print "Optimal block size written to mmm_final_config.json:", configuration.data
-    self.manipulator().save_to_file(configuration.data,
-                                    'mmm_final_config.json')
+    def objective(self):
+        # we could have also chosen to store 1.0 - accuracy in the time field
+        # and use the default MinimizeTime() objective
+        return MaximizeAccuracyMinimizeSize()
 
 
 if __name__ == '__main__':
-  argparser = opentuner.default_argparser()
-  GccFlagsTuner.main(argparser.parse_args())
+    argparser = opentuner.default_argparser()
+    CaptchaTuner.main(argparser.parse_args())
