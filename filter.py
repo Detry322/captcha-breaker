@@ -108,7 +108,7 @@ def conway_low(image):
     for (i, j) in iterator(image):
         if i == 0 or j == 0 or i + 1 == image.size[0] or j + 1 == image.size[1]:
             continue
-        if pixels[i, j] == 0 and count_around(old_pixels, i, j) < 2:
+        if pixels[i, j] == 0 and count_around(old_pixels, i, j) < 3:
             pixels[i, j] = 255
 
 
@@ -125,8 +125,8 @@ def conway_grow(image):
 
 @show_decorator()
 def conway_many(image):
-    for i in range(2):
-        conway_grow(image, config)
+    for i in range(3):
+        conway_grow(image)
 
 
 @show_decorator()
@@ -144,11 +144,23 @@ def replace_over(image, replacer):
         if max(pixels[p][:3]) == 0:
             pixels[p] = replacer_pix[p]
 
+
+def subtract(image, background):
+    pixels = image.load()
+    background_p = background.load()
+    for p in iterator(image):
+        difference = sum(abs(a - b) for a, b in zip(pixels[p], background_p[p]))
+        if difference > 60:
+            pixels[p] = (0, 0, 0)
+        else:
+            pixels[p] = (255, 255, 255)
+
 def main():
     # pixelmode([Image.open(i) for i in glob.glob('tests/*.jpeg')], 2).show()
-    avg = Image.open('mode5.png')
-    replace_over(avg, pixelmode([Image.open(i) for i in glob.glob('tests/*.jpeg')], 6))
-    avg.show()
+    background = Image.open('background.png')
+    test = Image.open(random.choice(glob.glob('tests/*.jpeg')))
+    subtract(test, background)
+    test.show()
     # image = Image.open(random.choice(glob.glob('tests/*.jpeg')))
     # highlight_pixeldiff(image, avg)
     # highlight_is_gray(image)
