@@ -2,6 +2,7 @@ import glob
 import pytesseract
 import random
 
+from collections import defaultdict
 from functools import wraps
 from multiprocessing import Pool
 from PIL import Image
@@ -217,7 +218,7 @@ def attempt_detect(image, average, config):
     image = conway_many(image, config)
     if config['overlay']:
         image = overlay(image, original)
-    return solution_from_image(image)
+    return solution_from_image(image), filter_split(image)
 
 
 def detect(args):
@@ -225,7 +226,14 @@ def detect(args):
     image = Image.open(image_filename)
     answer = image_filename[6:-5]
     average = Image.open('average.png')
-    solution = attempt_detect(image, average, config)
+    solution, pieces = attempt_detect(image, average, config)
+    # if len(pieces) == 4:
+    #     import uuid, os
+    #     for char, chari in zip(answer, pieces):
+    #         path = 'characters/{}'.format(char)
+    #         if not os.path.exists(path):
+    #             os.mkdir(path)
+    #         chari.save('{}/{}.jpeg'.format(path, uuid.uuid4().hex))
     return (answer, solution)
 
 
@@ -248,6 +256,8 @@ def score_multiple(config):
     correct, incorrect, skipped = 0, 0, 0
     cchar, tchar = 0, 0
 
+    stuff = defaultdict(lambda: defaultdict(lambda: 0))
+
     for answer, solution in results:
         if answer == solution:
             correct += 1
@@ -257,12 +267,21 @@ def score_multiple(config):
             incorrect += 1
         cchar += sum(int(c1 == c2) for (c1, c2) in zip(answer, solution))
         tchar += sum(int(c != '?') for c in solution)
+        for a, s in zip(answer, solution):
+            if s == '?':
+                continue
+            stuff[a][s] += 1
 
     if PRINT:
         print "Correct:   {}".format(correct)
         print "Incorrect: {}".format(incorrect)
         print "Skipped:   {}".format(skipped)
         print "Character accuracy: {}/{} {}".format(cchar, tchar, float(cchar)/tchar)
+        for c in sorted('abcdefghijklmnopqrstuvwxyz1234567890', key=lambda c:float(stuff[c][c])/sum(stuff[c][a] for a in stuff[c].keys())):
+            total = sum(stuff[c][a] for a in stuff[c].keys())
+            correct = stuff[c][c]
+            most_picked = max(stuff[c].keys(), key=lambda a: 0 if a == c else stuff[c][a])
+            print "{}:\t{:.04f}\t{}/{}\t{}\t{}".format(c, float(correct)/total, correct, total, most_picked, stuff[c][most_picked])
     score = skipped + 10*correct - 10*incorrect
     if PRINT:
         print "SCORE: {}".format(score)
