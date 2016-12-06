@@ -59,12 +59,12 @@ def pixelavg(images):
         pixels[p] = (r/len(images), g/len(images), b/len(images))
     return image
 
-def pixelmode(images):
+def pixelmode(images, level):
     image = images[0].copy()
     pixels = image.load()
     others_pixels = [i.load() for i in images]
     for p in iterator(image):
-        pixels[p] = Counter([pxls[p] for pxls in others_pixels]).most_common(1)[-1][0]
+        pixels[p] = Counter([pxls[p] for pxls in others_pixels]).most_common(level)[-1][0]
     return image
 
 def pixeldiff(p1, p2):
@@ -136,9 +136,18 @@ def highlight_is_gray(image):
         pixels[p] = (max(abs(max(pixels[p]) - sum(pixels[p])/3),
                         abs(min(pixels[p]) - sum(pixels[p])/3)) * 3,)*3
 
+def replace_over(image, replacer):
+    replacer_pix = replacer.load()
+    pixels = image.load()
+    for p in iterator(image):
+        print pixels[p]
+        if max(pixels[p][:3]) == 0:
+            pixels[p] = replacer_pix[p]
 
 def main():
-    avg = pixelmode([Image.open(i) for i in glob.glob('tests/*.jpeg')])
+    # pixelmode([Image.open(i) for i in glob.glob('tests/*.jpeg')], 2).show()
+    avg = Image.open('mode5.png')
+    replace_over(avg, pixelmode([Image.open(i) for i in glob.glob('tests/*.jpeg')], 6))
     avg.show()
     # image = Image.open(random.choice(glob.glob('tests/*.jpeg')))
     # highlight_pixeldiff(image, avg)
