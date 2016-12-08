@@ -1,12 +1,14 @@
 captcha-breaker
 ===============
 
-This is a simple CAPTCHA breaker I wrote. It only breaks a specific type of captcha.
+This is a simple CAPTCHA breaker I wrote. It only breaks a specific type of captcha. Here is some proof that it works! :D
+
+![LOOK IT WORKS :D](/yay_works.png?raw=true "Breaking Captchas")
 
 Usage
 -----
 
-For now, `python captchabreaker.py`, but still WIP.
+`python predict.py` to load the model and run some predictions. It requires that there are images in the `tests/` directory to load from.
 
 Install Dependencies
 --------------------
